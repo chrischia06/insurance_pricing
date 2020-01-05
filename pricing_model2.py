@@ -154,16 +154,16 @@ class PricingModel():
         
         # Remember to include a line similar to the one below
         X_clean = self._preprocessor(X_raw)
-        X_train, X_test,y_train,y_test = train_test_split(X_clean,y_made_claim,test_size=0.5,stratify=y_made_claim,shuffle=True)
+        # X_train, X_test,y_train,y_test = train_test_split(X_clean,y_made_claim,test_size=0.5,stratify=y_made_claim,shuffle=True)
 
 
 
-        sample_weights = np.zeros(len(y_train))
-        sample_weights[y_train == 0] = 1
-        sample_weights[y_train == 1] = 8
+        sample_weights = np.zeros(len(y_made_claim))
+        sample_weights[y_made_claim == 0] = 1
+        sample_weights[y_made_claim == 1] = 8
 
 
-        self.gbc.fit(X_train,y_train,sample_weight=sample_weights)
+        self.gbc.fit(X_clean,y_made_claim,sample_weight=sample_weights)
         X_clean['preds'] = self.gbc.predict_proba(X_clean)[:,1]
         self.gbr.fit(X_clean,y_claims_amount)
         return None

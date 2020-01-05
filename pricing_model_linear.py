@@ -32,10 +32,8 @@ import pickle
 from sklearn.calibration import CalibratedClassifierCV
 from sklearn.model_selection import train_test_split
 # from sklearn.naive_bayes import ComplementNB 
-# from sklearn.linear_model import LogisticRegressionCV, LinearRegression
-# from sklearn.decomposition import PCA
-from sklearn.ensemble import GradientBoostingClassifier,GradientBoostingRegressor
-from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegressionCV, LinearRegression
+from sklearn.decomposition import PCA
 from sklearn.utils.validation import check_is_fitted
 
 # ========================= 2. THE PRICING MODEL ===============================
@@ -50,25 +48,18 @@ class PricingModel():
     """
 
     def __init__(self,):
-        
+
         # =============================================================
         # This line ensures that your file (pricing_model.py) and the saved
         # model are consistent and can be used together.
         self._init_consistency_check()  # DO NOT REMOVE
-        self.booleanFeatures1 = ['pol_payd','Professional','WorkPrivate','M','order_pol_coverage','drv_drv2','diesel']#+['diesel','tourism','pol_bonus2',Retired','Maxi', 'Median1', 'Median2', 'Mini'] # omitted - + ['drv_drv2','vh_make','vh_model','canton_code','commune_code',city_district_code','regional_department_code','Biannual', 'Monthly','Quarterly']
-        self.numericFeatures1 = ['pol_duration', 'vh_din', 'pol_bonus', 'population', 'pol_sit_duration', 'vh_value', 'vh_sale_begin',  'vh_cyl','vh_sale_end','vh_age', 'vh_speed', 'drv_age1', 'vh_weight','town_mean_altitude'] #['drv_age_lic1','order_pol_coverage','town_surface_area','town_mean_altitude']
-
-        self.gbc = GradientBoostingClassifier(
-            learning_rate=0.1,
-            n_estimators=500,
-            max_depth=6,
-            n_iter_no_change=100,
-            max_features='auto',
-            subsample=1,
-            validation_fraction=0.2)
-
-        self.gbr = GradientBoostingRegressor(n_estimators=500,max_depth=5,loss='ls',n_iter_no_change=100)
-        
+        # self.bnb = ComplementNB(class_prior=[0.1,0.9])
+        self.logit =  LogisticRegressionCV(cv=4,penalty='elasticnet',l1_ratios=[0.5],solver='saga',scoring='f1',max_iter=3000,class_weight={0:1,1:8},n_jobs=-1)
+        self.lr = LinearRegression()
+        self.booleanFeatures = ['pol_payd','Professional','Retired','M','diesel','order_pol_coverage','tourism']#+['Maxi', 'Median1', 'Median2', 'Mini'] # omitted - + ['drv_drv2','vh_make','vh_model','canton_code','commune_code',city_district_code','regional_department_code','Biannual', 'Monthly','Quarterly']
+        self.numericFeatures = ['pol_duration', 'vh_din', 'pol_bonus', 'population', 'pol_sit_duration', 'vh_value', 'vh_sale_begin', 'vh_sale_end', 'vh_cyl', 'vh_speed', 'drv_age1', 'vh_weight', 'vh_age', 'drv_age_lic1'] #+ ['order_pol_coverage','town_surface_area','town_mean_altitude']
+        self.pca = PCA()
+        # self.knn = KNeighborsClassifier(n_neighbors=3,weights='uniform',n_jobs=-1,p=1)
     def _preprocessor(self, X_raw):
         """
 
@@ -126,12 +117,18 @@ class PricingModel():
         X_raw2['order_pol_coverage'] = X_raw2['pol_coverage'].apply(lambda x : order[x]/4)
 
         unwantedFeatures= ['id_policy','pol_coverage','pol_pay_freq','pol_usage','pol_insee_code','drv_sex1',
-                   'drv_age2','drv_sex2','drv_age_lic2','vh_fuel','vh_make','vh_model','vh_type']+['commune_code',
-       'canton_code', 'city_district_code', 'regional_department_code']+['Yearly']
-    
+                       'drv_age2','drv_sex2','drv_age_lic2','vh_fuel','vh_make','vh_model','vh_type']+['commune_code',
+           'canton_code', 'city_district_code', 'regional_department_code']+['WorkPrivate','Yearly']#+['drv_drv2']
         
         X_raw2 = X_raw2.drop(unwantedFeatures,axis=1)
-        return X_raw2[self.numericFeatures1+self.booleanFeatures1]
+
+        X_raw2[self.numericFeatures] = ((X_raw2[self.numericFeatures]-X_raw2[self.numericFeatures].mean())/X_raw2[self.numericFeatures].std())        
+        if hasattr(self.pca, "components_"):
+            X2 = self.pca.transform(X_raw2[self.numericFeatures])[:,:12]
+        else:
+            X2 = self.pca.fit_transform(X_raw2[self.numericFeatures])[:,:12]
+        X3 = pd.concat([X_raw2[self.booleanFeatures].copy(),pd.DataFrame(X2,index=X_raw2[self.booleanFeatures].index)],axis=1)
+        return X3
 
 
     def fit(self, X_raw, y_made_claim, y_claims_amount):
@@ -154,18 +151,10 @@ class PricingModel():
         
         # Remember to include a line similar to the one below
         X_clean = self._preprocessor(X_raw)
-        X_train, X_test,y_train,y_test = train_test_split(X_clean,y_made_claim,test_size=0.5,stratify=y_made_claim,shuffle=True)
-
-
-
-        sample_weights = np.zeros(len(y_train))
-        sample_weights[y_train == 0] = 1
-        sample_weights[y_train == 1] = 8
-
-
-        self.gbc.fit(X_train,y_train,sample_weight=sample_weights)
-        X_clean['preds'] = self.gbc.predict_proba(X_clean)[:,1]
-        self.gbr.fit(X_clean,y_claims_amount)
+        self.logit.fit(X_clean,y_made_claim)
+        X_clean['preds'] = self.logit.predict_proba(X_clean)[:,1]
+        y2 = y_made_claim[y_made_claim!=0]
+        self.lr.fit(X_clean.loc[y2.index],np.log(y2))
         return None
 
 
@@ -191,10 +180,8 @@ class PricingModel():
 
         # Remember to include a line similar to the one below
         X_clean = self._preprocessor(X_raw)
-        X_clean['preds'] = self.gbc.predict_proba(X_clean)[:,1]
-        X_clean['premiums'] = self.gbr.predict(X_clean)
-        return X_clean['premiums'].apply(lambda x : max(100,x))
-        
+        X_clean['preds'] = self.logit.predict_proba(X_clean)[:,1]
+        return ((pd.DataFrame(np.exp(self.lr.predict(X_clean))))/4)[0]
         
 
 
