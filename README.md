@@ -6,5 +6,11 @@ The objective is to :
 + model insurance claim loss (regression)
 + Using your predicted prices, construct a pricing strategy which will be used to compete with others on the platform
 
+## Notebooks
 
-[Exploratory Data Analysis](EDA/Insurance_Pricing_Game_EDA_Python.md)
++ [Exploratory Data Analysis](EDA/Insurance_Pricing_Game_EDA_Python.md)
+
+## Timeline
+
++ Recorded ML experiments - 21/01/2021
+
